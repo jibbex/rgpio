@@ -1,2 +1,4 @@
 rgpio/target
+rgpio/Cargo.lock
 rgpiolib/target
+rgpiolib/Cargo.lock
