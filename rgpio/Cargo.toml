@@ -1,0 +1,8 @@
+[package]
+name = "rgpio"
+version = "0.1.0"
+edition = "2021"
+authors = ["Manfred Michaelis <mm@michm.de>"]
+
+[dependencies]
+rgpiolib = { path = "../rgpiolib" }
