@@ -1,3 +1,5 @@
+mod tests;
+
 use std::env;
 use std::{thread, time};
 use std::error::Error;
