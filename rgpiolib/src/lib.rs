@@ -13,7 +13,6 @@
 ///     gpio::set_direction(gpio_num, gpio::Directions::Output);
 ///     gpio::write(gpio_num, true);
 ///     let val = gpio::read(gpio_num);
-///     println!("{}", val);
 ///     gpio::unexport(gpio_num);
 /// }
 /// ```
@@ -64,9 +63,15 @@ pub mod gpio {
                 /// Path to unexport GPIO pin
                 GpioPaths::UNEXPORT => "/sys/class/gpio/unexport",
                 /// Path to value of GPIO pin
-                GpioPaths::VALUE(num) => format!("/sys/class/gpio/gpio{}/value", num).as_str(),
+                GpioPaths::VALUE(num) => {
+                    let path = format!("/sys/class/gpio/gpio{}/value", num);
+                    Box::leak(path.into_boxed_str())
+                },
                 /// Path to direction of GPIO pin
-                GpioPaths::DIRECTION(num) => format!("/sys/class/gpio/gpio{}/direction", num).as_str(),
+                GpioPaths::DIRECTION(num) => {
+                    let path = format!("/sys/class/gpio/gpio{}/direction", num);
+                    Box::leak(path.into_boxed_str())
+                },
             }
         }
     }
@@ -113,7 +118,7 @@ pub mod gpio {
     /// - IO error
     /// - ParseInt error
     #[derive(Debug)]
-    enum GpioError {
+    pub enum GpioError {
         Io(std::io::Error),
         ParseInt(std::num::ParseIntError),
     }
@@ -195,13 +200,11 @@ pub mod gpio {
     ///
     /// This function should be called before setting the direction of the GPIO pin.
     pub fn export(gpio_num: i32) -> GpioResult<()> {
-        Ok(
-            open_file(GpioPaths::EXPORT.as_str()).and_then(|mut file| {
-                file.write_all(gpio_num.to_string().as_bytes()).or_else(|why| {
-                    Err(GpioError::Io(why))
-                })
-            })?
-        )
+       open_file(GpioPaths::EXPORT.as_str()).and_then(|mut file| {
+            file.write_all(gpio_num.to_string().as_bytes()).map_err(|why| {
+                GpioError::Io(why)
+            })
+        })
     }
 
     /// Unexport GPIO pin
@@ -234,13 +237,11 @@ pub mod gpio {
     ///
     /// This function should be called after exporting the GPIO pin.
     pub fn unexport(gpio_num: i32) -> GpioResult<()> {
-        Ok(
-            open_file(GpioPaths::UNEXPORT.as_str()).and_then(|mut file| {
-                file.write_all(gpio_num.to_string().as_bytes()).or_else(|why| {
-                    Err(GpioError::Io(why))
-                })
-            })?
-        )
+        open_file(GpioPaths::UNEXPORT.as_str()).and_then(|mut file| {
+            file.write_all(gpio_num.to_string().as_bytes()).map_err(|why| {
+                GpioError::Io(why)
+            })
+        })
     }
 
     /// Write to GPIO pin
@@ -279,10 +280,13 @@ pub mod gpio {
     /// A `GpioResult` that contains the signal read from the GPIO pin.
     pub fn read(gpio_num: i32) -> GpioResult<bool> {
         let value = fs::read_to_string(GpioPaths::VALUE(gpio_num).as_str()).and_then(|contents| {
-           contents.parse::<i32>().or_else(GpioError::from)
-        })?;
+           match contents.parse::<i32>() {
+                Ok(val) => Ok(val),
+                Err(why) => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, why)),
+           }
+        }).map_err(GpioError::from);
 
-        Ok(value > 0)
+        value.map(|val| val > 0)
     }
 
     /// Set GPIO pin direction
@@ -316,7 +320,7 @@ pub mod gpio {
     /// This function should be called after exporting the GPIO pin.
     pub fn set_direction(gpio_num: i32, direction: Directions) -> GpioResult<()> {
         open_file(GpioPaths::DIRECTION(gpio_num).as_str()).and_then(|mut file| {
-            file.write_all(direction.as_bytes()).or_else(GpioError::from)
+            file.write_all(direction.as_bytes()).map_err(GpioError::from)
         })
     }
 }
